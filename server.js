@@ -1,7 +1,7 @@
 import express from 'express';
 import { connectDB, closeDB } from './db/mongo.js';
 import * as playerController from './controllers/playerController.js';
-
+import * as simulationController from './controllers/simulationController.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,7 +21,9 @@ app.get('/api/players/:playerId', playerController.getSinglePlayer);
 app.post('/api/players/initialize', playerController.initSystem);
 
 
-
+// Simulation Routes
+app.post('/api/simulate/match', simulationController.simulateNewMatchController);
+app.post('/api/randomize-event', simulationController.triggerRandomEventController);
 
 async function startServer() {
     try {
