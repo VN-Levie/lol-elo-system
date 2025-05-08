@@ -44,11 +44,18 @@ function generatePerformanceStats(role, didWin, champion) {
 
 async function updatePlayerAfterMatch(db, playerId, eloChange, matchRecordForHistory) {
     const player = await db.collection(PLAYERS_COLLECTION).findOne({ playerId: playerId });
-    if (!player) return null;
+    if (!player) return null; 
 
-    const newElo = player.elo + eloChange;
+    let newElo = player.elo + eloChange;    
+    if (newElo < 0) {
+        newElo = 0;        
+        matchRecordForHistory.eloChange = 0 - player.elo;
+    } else {      
+        matchRecordForHistory.eloChange = eloChange;
+    }
+    
     const newGamesPlayed = player.gamesPlayed + 1;
-
+   
     await db.collection(PLAYERS_COLLECTION).updateOne(
         { playerId: playerId },
         {
@@ -61,9 +68,16 @@ async function updatePlayerAfterMatch(db, playerId, eloChange, matchRecordForHis
             }
         }
     );
-    return { playerName: player.playerName, oldElo: player.elo, newElo, eloChange, role: matchRecordForHistory.role, champion: matchRecordForHistory.championPlayed.championName };
+   
+    return { 
+        playerName: player.playerName, 
+        oldElo: player.elo, 
+        newElo, 
+        eloChange: matchRecordForHistory.eloChange, 
+        role: matchRecordForHistory.role, 
+        champion: matchRecordForHistory.championPlayed.championName 
+    };
 }
-
 export async function simulateNewMatch() {
     const db = await getDB();
     const playerCount = await db.collection(PLAYERS_COLLECTION).countDocuments();
