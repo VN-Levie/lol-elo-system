@@ -2,6 +2,8 @@ import express from 'express';
 import { connectDB, closeDB } from './db/mongo.js';
 import * as playerController from './controllers/playerController.js';
 import * as simulationController from './controllers/simulationController.js';
+import * as championController from './controllers/championController.js';
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,6 +26,10 @@ app.post('/api/players/initialize', playerController.initSystem);
 // Simulation Routes
 app.post('/api/simulate/match', simulationController.simulateNewMatchController);
 app.post('/api/randomize-event', simulationController.triggerRandomEventController);
+
+// Champion Routes
+app.get('/api/champions', championController.getChampionsList);
+app.get('/api/champions/:championId', championController.getSingleChampion);
 
 async function startServer() {
     try {

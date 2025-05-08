@@ -1,0 +1,10 @@
+{
+    "championId": "string", // ID duy nhất, ví dụ "garen", "ahri" (nên dùng chữ thường, không khoảng trắng)
+    "championName": "string", // Tên hiển thị, ví dụ "Garen", "Ahri"
+    "primaryRole": "string", // Ví dụ "Fighter", "Mage", "Marksman", "Assassin", "Tank", "Support"
+    "secondaryRoles": ["string"], // Mảng các vai trò phụ (có thể có hoặc không), ví dụ ["Tank"] cho Garen
+    "tags": ["string"], // Mảng các tag mô tả lối chơi, ví dụ ["Melee", "Tanky", "SpinToWin"]
+    "releaseDate": "ISODate", // (Tùy chọn) Ngày ra mắt
+    "loreSummary": "string" // (Tùy chọn) Tóm tắt cốt truyện
+    // Thêm các thuộc tính khác nếu cần trong tương lai
+  }
