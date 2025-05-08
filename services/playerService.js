@@ -44,9 +44,9 @@ export async function initializePlayers(forceReset = false) {
         
         if (lastMatch.length > 0 && lastMatch[0].matchId) {
             const idNum = parseInt(lastMatch[0].matchId.split('_')[1]);
-            if (!isNaN(idNum)) matchIdCounter = idNum;
+            if (!isNaN(idNum)) playerService.setMatchIdCounter(idNum); // Call the setter
         } else {
-            matchIdCounter = 0;
+            playerService.setMatchIdCounter(0); // Reset if no matches
         }
         return { message: `${existingPlayerCount} players already exist. Initialization skipped.`, count: existingPlayerCount, matchIdCounter };
     }
@@ -62,7 +62,7 @@ export async function initializePlayers(forceReset = false) {
         });
     }
     await playersCollection.insertMany(newPlayers);
-    matchIdCounter = 0;
+    playerService.setMatchIdCounter(0);
     return { message: `${TOTAL_PLAYERS_INIT} players initialized/re-initialized.`, count: TOTAL_PLAYERS_INIT, matchIdCounter };
 }
 
