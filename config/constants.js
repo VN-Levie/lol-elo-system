@@ -2,6 +2,7 @@ export const INITIAL_ELO = 1200;
 export const TOTAL_PLAYERS_INIT = 100;
 export const MATCH_HISTORY_LENGTH = 100;
 export const PLAYERS_COLLECTION = 'players';
+export const CHAMPIONS_COLLECTION = 'champions';
 
 export const K_FACTORS = {
     NEW_PLAYER_GAMES_THRESHOLD: 30,
