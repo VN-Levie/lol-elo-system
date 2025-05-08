@@ -92,17 +92,16 @@ export async function simulateNewMatch() {
         { $sample: { size: 10 } }
     ]).toArray();
 
-    // Assign roles and champions, and prepare participant data for the match
+    
     const participants = [];
-    const shuffledRoles = [...STANDARD_ROLES].sort(() => 0.5 - Math.random()); // Shuffle roles for variety per team
-
+    const shuffledRoles = [...STANDARD_ROLES].sort(() => 0.5 - Math.random()); 
     for (let i = 0; i < 10; i++) {
         const playerDoc = participantsFromDB[i];
-        const assignedRole = shuffledRoles[i % 5]; // Ensures each team gets one of each role if STANDARD_ROLES has 5 unique roles
+        const assignedRole = shuffledRoles[i % 5]; 
         const champion = await championService.getRandomChampion(assignedRole);
 
         participants.push({
-            ...playerDoc, // Spread original player data (playerId, playerName, elo, gamesPlayed)
+            ...playerDoc, 
             role: assignedRole,
             champion: champion ? { championId: champion.championId, championName: champion.championName } : { championId: "unknown", championName: "Unknown" }, // Store minimal champ info
             // Performance stats will be generated after win/loss is determined
