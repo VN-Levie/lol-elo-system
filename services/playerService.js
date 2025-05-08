@@ -1,4 +1,3 @@
-// services/playerService.js
 import { getDB } from '../db/mongo.js';
 import { PLAYERS_COLLECTION, INITIAL_ELO, TOTAL_PLAYERS_INIT } from '../config/constants.js';
 
@@ -44,9 +43,9 @@ export async function initializePlayers(forceReset = false) {
         
         if (lastMatch.length > 0 && lastMatch[0].matchId) {
             const idNum = parseInt(lastMatch[0].matchId.split('_')[1]);
-            if (!isNaN(idNum)) playerService.setMatchIdCounter(idNum); // Call the setter
+            if (!isNaN(idNum)) setMatchIdCounter(idNum); // Call the setter
         } else {
-            playerService.setMatchIdCounter(0); // Reset if no matches
+            setMatchIdCounter(0); // Reset if no matches
         }
         return { message: `${existingPlayerCount} players already exist. Initialization skipped.`, count: existingPlayerCount, matchIdCounter };
     }
@@ -62,7 +61,7 @@ export async function initializePlayers(forceReset = false) {
         });
     }
     await playersCollection.insertMany(newPlayers);
-    playerService.setMatchIdCounter(0);
+    setMatchIdCounter(0);
     return { message: `${TOTAL_PLAYERS_INIT} players initialized/re-initialized.`, count: TOTAL_PLAYERS_INIT, matchIdCounter };
 }
 
