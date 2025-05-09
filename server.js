@@ -4,6 +4,8 @@ import * as playerController from './controllers/playerController.js';
 import * as simulationController from './controllers/simulationController.js';
 import * as championController from './controllers/championController.js';
 import * as matchController from './controllers/matchController.js';
+import * as statsController from './controllers/statsController.js';
+
 
 
 const app = express();
@@ -37,6 +39,11 @@ app.post('/api/randomize-event', simulationController.triggerRandomEventControll
 // Match Detail Routes 
 app.get('/api/matches', matchController.getPlayerMatchHistoryFromMatches); // Example: /api/matches?playerId=player_1&limit=10&page=1
 app.get('/api/matches/:matchId', matchController.getMatchDetails);
+
+
+// Stats Routes
+app.get('/api/stats/elo-distribution', statsController.getEloDistribution);
+
 
 async function startServer() {
     try {
