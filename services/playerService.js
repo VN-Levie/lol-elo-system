@@ -1,6 +1,5 @@
-// services/playerService.js
 import { getDB } from '../db/mongo.js';
-import { PLAYERS_COLLECTION, INITIAL_ELO, TOTAL_PLAYERS_INIT } from '../config/constants.js';
+import { PLAYERS_COLLECTION, INITIAL_ELO, TOTAL_PLAYERS_INIT, MATCHES_COLLECTION } from '../config/constants.js';
 
 let matchIdCounter = 0; // This should ideally be managed more robustly, e.g., from DB
 
@@ -26,14 +25,15 @@ export async function getPlayerByIdOrName(identifier) {
 export async function initializePlayers(forceReset = false) {
     const db = await getDB();
     const playersCollection = db.collection(PLAYERS_COLLECTION);
-
+    const matchesCollection = db.collection(MATCHES_COLLECTION);
     if (forceReset) {
         await playersCollection.deleteMany({});
+        await matchesCollection.deleteMany({});
         console.log("Previous player data cleared for initialization.");
     }
 
     const existingPlayerCount = await playersCollection.countDocuments();
-    if (existingPlayerCount > 0 && !forceReset) {      
+    if (existingPlayerCount > 0 && !forceReset) {
         const lastMatch = await playersCollection.aggregate([
             { $match: { "matchHistory.0": { $exists: true } } },
             { $unwind: "$matchHistory" },
@@ -41,16 +41,16 @@ export async function initializePlayers(forceReset = false) {
             { $limit: 1 },
             { $project: { _id: 0, matchId: "$matchHistory.matchId" } }
         ]).toArray();
-        
+
         if (lastMatch.length > 0 && lastMatch[0].matchId) {
             const idNum = parseInt(lastMatch[0].matchId.split('_')[1]);
-            if (!isNaN(idNum)) playerService.setMatchIdCounter(idNum); // Call the setter
+            if (!isNaN(idNum)) setMatchIdCounter(idNum); // Call the setter
         } else {
-            playerService.setMatchIdCounter(0); // Reset if no matches
+            setMatchIdCounter(0); // Reset if no matches
         }
         return { message: `${existingPlayerCount} players already exist. Initialization skipped.`, count: existingPlayerCount, matchIdCounter };
     }
-    
+
     const newPlayers = [];
     for (let i = 1; i <= TOTAL_PLAYERS_INIT; i++) {
         newPlayers.push({
@@ -62,7 +62,7 @@ export async function initializePlayers(forceReset = false) {
         });
     }
     await playersCollection.insertMany(newPlayers);
-    playerService.setMatchIdCounter(0);
+    setMatchIdCounter(0);
     return { message: `${TOTAL_PLAYERS_INIT} players initialized/re-initialized.`, count: TOTAL_PLAYERS_INIT, matchIdCounter };
 }
 
