@@ -11,14 +11,14 @@ import * as matchController from './controllers/matchController.js';
 import * as configController from './controllers/configController.js';
 import * as statsController from './controllers/statsController.js';
 
-// Import matchService để gọi hàm mô phỏng từ WebSocket handler
+
 import * as matchService from './services/matchService.js';
 
 const app = express();
-const httpServer = createServer(app); // Create HTTP server from Express app
-const io = new SocketIOServer(httpServer, { // Attach Socket.IO to the HTTP server
+const httpServer = createServer(app); 
+const io = new SocketIOServer(httpServer, { 
     cors: {
-        origin: "*", // Cho phép tất cả các origin trong development. Nên cấu hình chặt chẽ hơn cho production.
+        origin: "*", 
         methods: ["GET", "POST"]
     }
 });
@@ -28,7 +28,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// --- API Routes (giữ nguyên) ---
+
 app.get('/', (req, res) => res.send('LoL Elo System API is running!'));
 app.get('/api/players', playerController.getPlayersList);
 app.get('/api/players/:playerId', playerController.getSinglePlayer);
@@ -79,6 +79,7 @@ io.on('connection', (socket) => {
 
 
     socket.on('start_simulation_job', async (data) => {
+        console.log(`Received start_simulation_job request from ${socket.id}:`, data);
         if (globalSimulationStatus.isRunning) {
             socket.emit('simulation_job_error', { 
                 taskId: globalSimulationStatus.taskId, 
@@ -88,8 +89,8 @@ io.on('connection', (socket) => {
         }
 
         const numMatches = parseInt(data.numMatches) || 1;
-        const actualNumMatches = Math.min(Math.max(1, numMatches), 500); // Max 500
-
+        const actualNumMatches = Math.min(Math.max(1, numMatches), 10000); // Max 500
+        console.log(`Requested to simulate ${actualNumMatches} matches.`);
         const taskId = `sim_${Date.now()}_${socket.id.substring(0,5)}`;
         globalSimulationStatus = {
             isRunning: true,
