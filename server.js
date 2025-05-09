@@ -3,6 +3,7 @@ import { connectDB, closeDB } from './db/mongo.js';
 import * as playerController from './controllers/playerController.js';
 import * as simulationController from './controllers/simulationController.js';
 import * as championController from './controllers/championController.js';
+import * as matchController from './controllers/matchController.js';
 
 
 const app = express();
@@ -19,17 +20,23 @@ app.get('/', (req, res) => {
 
 // Player Routes
 app.get('/api/players', playerController.getPlayersList);
-app.get('/api/players/:playerId', playerController.getSinglePlayer);
+app.get('/api/players/:playerId', playerController.getSinglePlayer); // This gets player profile + their embedded matchHistory
 app.post('/api/players/initialize', playerController.initSystem);
+
+// Champion Routes (if implemented)
+if (championController.getChampionsList) { // Check if champion controller routes exist
+    app.get('/api/champions', championController.getChampionsList);
+    app.get('/api/champions/:championId', championController.getSingleChampion);
+}
 
 
 // Simulation Routes
 app.post('/api/simulate/match', simulationController.simulateNewMatchController);
 app.post('/api/randomize-event', simulationController.triggerRandomEventController);
 
-// Champion Routes
-app.get('/api/champions', championController.getChampionsList);
-app.get('/api/champions/:championId', championController.getSingleChampion);
+// Match Detail Routes 
+app.get('/api/matches', matchController.getPlayerMatchHistoryFromMatches); // Example: /api/matches?playerId=player_1&limit=10&page=1
+app.get('/api/matches/:matchId', matchController.getMatchDetails);
 
 async function startServer() {
     try {
