@@ -2,26 +2,43 @@ import * as matchService from '../services/matchService.js';
 
 export async function simulateNewMatchController(req, res) {
     try {
-        const numMatches = req.body.numMatches ? parseInt(req.body.numMatches) : 1; 
-        if (isNaN(numMatches) || numMatches <= 0) {
-            return res.status(400).json({ success: false, message: "numMatches must be a positive integer" });
-        }
-        const matches = [];
-        for (let i = 0; i < numMatches; i++) {
+        const numMatches = parseInt(req.body.numMatches) || 1; 
+        const maxMatches = 500;
+        const actualNumMatches = Math.min(Math.max(1, numMatches), maxMatches);
+
+        let overallSuccess = true;
+        const individualMatchResults = [];
+        let errorMessage = '';
+
+        for (let i = 0; i < actualNumMatches; i++) {            
             const result = await matchService.simulateNewMatch();
             if (!result.success) {
-                return res.status(400).json(result);
+                overallSuccess = false;
+                errorMessage = result.message || "An error occurred during one of the simulations.";               
+                individualMatchResults.push({success: false, matchNumber: i+1, message: result.message });
+            } else {
+                individualMatchResults.push({success: true, matchNumber: i+1, data: result.data});
             }
-            matches.push(result);
         }
-        res.json({ success: true, matches });
-        
+
+        if (!overallSuccess) {            
+            return res.status(400).json({ 
+                success: false, 
+                message: `Simulated ${actualNumMatches} matches, but some failed. ${errorMessage}`,
+                details: individualMatchResults 
+            });
+        }
+
+        res.json({ 
+            success: true, 
+            message: `Successfully simulated ${actualNumMatches} matches.`,            
+        });
+
     } catch (error) {
-        console.error("Error simulating match:", error);
-        res.status(500).json({ success: false, message: "Error simulating match", error: error.message });
+        console.error("Error in simulateNewMatchController:", error);
+        res.status(500).json({ success: false, message: "Server error during match simulation", error: error.message });
     }
 }
-
 export async function triggerRandomEventController(req, res) {
     try {
         const numPlayers = req.body.count ? parseInt(req.body.count) : 5; 
