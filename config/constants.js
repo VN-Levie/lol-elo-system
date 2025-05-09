@@ -1,6 +1,6 @@
 export const INITIAL_ELO = 0;
 export const TOTAL_PLAYERS_INIT = 100; // just for initialization/testing
-export const MATCH_HISTORY_LENGTH = 99999;
+export const MATCH_HISTORY_LENGTH = 100;
 export const PLAYERS_COLLECTION = 'players';
 export const CHAMPIONS_COLLECTION = 'champions';
 export const MATCHES_COLLECTION = 'matches'
