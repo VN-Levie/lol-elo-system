@@ -5,6 +5,7 @@ import * as simulationController from './controllers/simulationController.js';
 import * as championController from './controllers/championController.js';
 import * as matchController from './controllers/matchController.js';
 import * as configController from './controllers/configController.js';
+import * as statsController from './controllers/statsController.js';
 import cors from 'cors'; 
 
 const app = express();
@@ -36,11 +37,19 @@ app.post('/api/simulate/match', simulationController.simulateNewMatchController)
 app.post('/api/randomize-event', simulationController.triggerRandomEventController);
 
 // Match Detail Routes 
-app.get('/api/matches', matchController.getPlayerMatchHistoryFromMatches); // Example: /api/matches?playerId=player_1&limit=10&page=1
+app.get('/api/matches', matchController.getPlayerMatchHistoryFromMatches); 
 app.get('/api/matches/:matchId', matchController.getMatchDetails);
 
 app.get('/api/config/pbr-settings', configController.getPbrSettings);
 
+
+// Stats Routes
+app.get('/api/stats/server-summary', statsController.getServerSummary);
+app.get('/api/stats/elo-distribution', statsController.getEloDistribution);
+app.get('/api/stats/champion-pick-rates', statsController.getChampionPickRates);
+app.get('/api/stats/champion-win-rates', statsController.getChampionWinRates);
+app.get('/api/stats/role-win-rates', statsController.getRoleWinRates); 
+app.get('/api/stats/average-stats-by-role', statsController.getAverageStatsByRole);
 async function startServer() {
     try {
         await connectDB();
