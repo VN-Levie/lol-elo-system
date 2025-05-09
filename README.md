@@ -83,40 +83,52 @@
 **Trạng Thái Tính Elo Hiện Tại (Rất Chi Tiết):**
 
 1.  Người chơi bắt đầu với **0 Elo**.
+
 2.  Khi một trận đấu kết thúc, với mỗi người chơi tham gia:
+
     a.  **`baseEloChange`** được tính dựa trên:
+
         *   Elo hiện tại của họ.
         *   K-Factor động (dựa trên số trận đã chơi và Elo hiện tại).
         *   Kết quả thắng/thua của đội họ.
         *   Chênh lệch Elo trung bình giữa đội họ và đội đối thủ (để tính Expected Score).
+
     b.  **`pbrAdjustment`** được tính dựa trên:
+
         *   So sánh KDA (tỷ lệ), CS/phút, Gold/phút của người chơi (được mô phỏng bởi `generatePerformanceStats` đã cải tiến) với các `PBR_BENCHMARKS` được định nghĩa sẵn cho vai trò mà họ đảm nhận trong trận đó.
         *   Mức độ "vượt trội" hay "kém hơn" benchmark này được quy thành một điểm Elo cộng/trừ, có giới hạn.
     c.  **`eloDeltaWithPbr = baseEloChange + pbrAdjustment`**.
+
     d.  **`streakAdjustment`** được tính dựa trên:
+
         *   Chuỗi thắng hoặc thua liên tiếp hiện tại của người chơi.
         *   Các ngưỡng `STREAK_THRESHOLDS` để xác định điểm bonus/malus.
     e.  **`finalEloDelta = eloDeltaWithPbr + streakAdjustment`**. Đây là tổng số điểm Elo người chơi sẽ nhận/mất *trước khi* xét sàn 0.
+
     f.  Elo mới của người chơi được tính: `player.elo_cũ + finalEloDelta`.
+
     g.  **Kiểm tra sàn Elo:** Nếu Elo mới < 0, nó được đặt thành 0.
+
     h.  `eloChange` thực tế được ghi vào lịch sử đấu (`matchHistory` và `matches`) là lượng điểm đã thực sự thay đổi sau khi áp dụng sàn 0.
+
     i.  Chuỗi thắng/thua của người chơi được cập nhật.
 
 ---
 
 **Timeline (Các Mốc Chính Đã Hoàn Thành):**
 
-1.  : Khởi tạo dự án, xây dựng logic Elo cơ bản (K-Factor, S, E) và mô phỏng trận đấu ngẫu nhiên đơn giản trên console.
-2. : Quyết định sử dụng MongoDB. Thiết lập kết nối DB. Chuyển đổi dữ liệu người chơi sang lưu trữ trong MongoDB.
-3.  : Bắt đầu xây dựng API với Express.js. Tái cấu trúc code thành services/controllers. Triển khai các API cơ bản cho Player và Simulate.
-4.  : Thảo luận và triển khai collection `matches` để lưu trữ chi tiết toàn bộ trận đấu. Tạo API truy vấn `matches`.
-5. : Bắt đầu tích hợp PBR:
+1. Khởi tạo dự án, xây dựng logic Elo cơ bản (K-Factor, S, E) và mô phỏng trận đấu ngẫu nhiên đơn giản trên console.
+2. Quyết định sử dụng MongoDB. Thiết lập kết nối DB. Chuyển đổi dữ liệu người chơi sang lưu trữ trong MongoDB.
+3. Bắt đầu xây dựng API với Express.js. Tái cấu trúc code thành services/controllers. Triển khai các API cơ bản cho Player và Simulate.
+4. Thảo luận và triển khai collection `matches` để lưu trữ chi tiết toàn bộ trận đấu. Tạo API truy vấn `matches`.
+5. Bắt đầu tích hợp PBR:
     *   Thay đổi `INITIAL_ELO = 0`.
     *   Tạo collection `champions` và seed dữ liệu.
     *   Mô phỏng Vai trò, Tướng, và các chỉ số KDA, CS, Gold (hàm `generatePerformanceStats` phiên bản đầu).
-6.  : Triển khai logic PBR vào `eloService.calculateEloDelta` (so sánh với benchmark, tính `pbrAdjustment`). Đảm bảo Elo không âm.
-7.  : Thêm hệ thống Chuỗi Thắng/Thua (`currentWin/LossStreak`, `streakAdjustment`).
-8.  : Cải thiện đáng kể hệ thống mô phỏng trận đấu (`simulateNewMatch`):
+
+6. Triển khai logic PBR vào `eloService.calculateEloDelta` (so sánh với benchmark, tính `pbrAdjustment`). Đảm bảo Elo không âm.
+7. Thêm hệ thống Chuỗi Thắng/Thua (`currentWin/LossStreak`, `streakAdjustment`).
+8. Cải thiện đáng kể hệ thống mô phỏng trận đấu (`simulateNewMatch`):
     *   Cải thiện `generatePerformanceStats` để KDA/CS/Gold "thật" hơn, xét đến chênh lệch Elo.
     *   Triển khai matchmaking dựa trên Elo (tìm người chơi trong `searchRange`, cân bằng Elo 2 đội).
     *   Gán vai trò và chọn tướng dựa trên `preferredRoles` và `championPool` của người chơi.
