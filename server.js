@@ -5,6 +5,7 @@ import * as simulationController from './controllers/simulationController.js';
 import * as championController from './controllers/championController.js';
 import * as matchController from './controllers/matchController.js';
 import * as configController from './controllers/configController.js';
+import * as statsController from './controllers/statsController.js';
 import cors from 'cors'; 
 
 const app = express();
