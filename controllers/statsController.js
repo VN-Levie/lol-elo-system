@@ -234,3 +234,54 @@ export async function getEloDistribution(req, res) {
         res.status(500).json({ success: false, message: "Failed to get Elo distribution" });
     }
 }
+
+export async function getAverageStatsByRole(req, res) {
+    try {
+        const db = await getDB();
+        const matches = await db.collection(MATCHES_COLLECTION).find({}).toArray();
+        
+        const rolePerformance = {};
+        STANDARD_ROLES.forEach(role => {
+            rolePerformance[role] = { 
+                games: 0, totalKills: 0, totalDeaths: 0, totalAssists: 0, 
+                totalCs: 0, totalGold: 0 
+            };
+        });
+
+        matches.forEach(match => {
+            const processPlayer = (player) => {
+                if (player.role && rolePerformance[player.role]) {
+                    const stats = rolePerformance[player.role];
+                    stats.games++;
+                    stats.totalKills += player.kda?.kills || 0;
+                    stats.totalDeaths += player.kda?.deaths || 0;
+                    stats.totalAssists += player.kda?.assists || 0;
+                    stats.totalCs += player.cs || 0;
+                    stats.totalGold += player.gold || 0;
+                }
+            };
+            match.teamA.players.forEach(processPlayer);
+            match.teamB.players.forEach(processPlayer);
+        });
+
+        const resultData = STANDARD_ROLES.map(role => {
+            const stats = rolePerformance[role];
+            const kdaRatio = stats.games > 0 ? ((stats.totalKills + stats.totalAssists) / Math.max(1, stats.totalDeaths)) : 0;
+            return {
+                role: role,
+                games: stats.games,
+                avgKills: stats.games > 0 ? parseFloat((stats.totalKills / stats.games).toFixed(1)) : 0,
+                avgDeaths: stats.games > 0 ? parseFloat((stats.totalDeaths / stats.games).toFixed(1)) : 0,
+                avgAssists: stats.games > 0 ? parseFloat((stats.totalAssists / stats.games).toFixed(1)) : 0,
+                avgKdaRatio: parseFloat(kdaRatio.toFixed(2)),
+                avgCs: stats.games > 0 ? parseFloat((stats.totalCs / stats.games).toFixed(1)) : 0,
+                avgGold: stats.games > 0 ? parseFloat((stats.totalGold / stats.games).toFixed(0)) : 0,
+            };
+        });
+
+        res.json({ success: true, data: resultData });
+    } catch (error) {
+        console.error("Error fetching average stats by role:", error);
+        res.status(500).json({ success: false, message: "Failed to get average stats by role" });
+    }
+}
