@@ -15,3 +15,39 @@ export const K_FACTORS = {
 
 export const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017';
 export const DB_NAME = 'lol_elo_system';
+
+
+export const AVERAGE_MATCH_DURATION_MINUTES = 30;
+
+export const PBR_BENCHMARKS = {
+    "Top": {
+        kdaRatio: 2.5,
+        csPerMin: 7.0,
+        goldPerMin: 380
+    },
+    "Jungle": {
+        kdaRatio: 3.0,
+        totalCS_benchmark: 150, // Assuming 30 min game
+        goldPerMin: 360
+    },
+    "Mid": {
+        kdaRatio: 3.5,
+        csPerMin: 7.5,
+        goldPerMin: 420
+    },
+    "ADC": {
+        kdaRatio: 3.5,
+        csPerMin: 8.0,
+        goldPerMin: 440
+    },
+    "Support": {
+        kdaRatio: 2.8,
+        csPerMin: 1.5,
+        goldPerMin: 300
+    }
+};
+
+
+export const MAX_PBR_POSITIVE_ADJUSTMENT = 5;
+export const MAX_PBR_NEGATIVE_ADJUSTMENT = -5;
+

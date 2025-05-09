@@ -168,18 +168,24 @@ export async function simulateNewMatch() {
     const updatedTeamAPlayerInfo = [];
     const updatedTeamBPlayerInfo = [];
 
-    // Update Elo for players in Team A
     for (const player of teamAData) {
-        // TODO: Pass player.role, player.performance for PBR calculation into eloService.calculateEloDelta
         const eloDelta = eloService.calculateEloDelta(
-            player.elo, player.gamesPlayed, teamAWins, avgEloTeamA_before, avgEloTeamB_before
+            player.elo,
+            player.gamesPlayed,
+            teamAWins,
+            avgEloTeamA_before,
+            avgEloTeamB_before,
+            player.role,
+            player.performance.kda,
+            player.performance.cs,
+            player.performance.gold,
+            avgMatchElo
         );
         const matchRecordForPlayerHistory = {
             matchId: currentMatchId,
             myTeamAvgElo: avgEloTeamA_before,
             opponentTeamAvgElo: avgEloTeamB_before,
             result: teamAWins ? "win" : "loss",
-            // eloChange will be set by updatePlayerAfterMatch
             timestamp: matchTimestamp,
             role: player.role,
             championPlayed: player.champion,
@@ -191,11 +197,19 @@ export async function simulateNewMatch() {
         if (updateResult) updatedTeamAPlayerInfo.push(updateResult);
     }
 
-    // Update Elo for players in Team B
+
     for (const player of teamBData) {
-        // TODO: Pass player.role, player.performance for PBR calculation
         const eloDelta = eloService.calculateEloDelta(
-            player.elo, player.gamesPlayed, !teamAWins, avgEloTeamB_before, avgEloTeamA_before
+            player.elo,
+            player.gamesPlayed,
+            !teamAWins,
+            avgEloTeamB_before,
+            avgEloTeamA_before,
+            player.role,
+            player.performance.kda,
+            player.performance.cs,
+            player.performance.gold,
+            avgMatchElo
         );
         const matchRecordForPlayerHistory = {
             matchId: currentMatchId,
@@ -213,7 +227,7 @@ export async function simulateNewMatch() {
         if (updateResult) updatedTeamBPlayerInfo.push(updateResult);
     }
 
-    // Construct the match document for the 'matches' collection
+
     const matchDocument = {
         matchId: currentMatchId,
         timestamp: matchTimestamp,
@@ -255,8 +269,6 @@ export async function simulateNewMatch() {
 
     await db.collection(MATCHES_COLLECTION).insertOne(matchDocument);
 
-    // For the API response, we can simplify what's returned,
-    // or return the full matchDocument if the client wants all details.
     const apiResponseData = {
         matchId: currentMatchId,
         winningTeam: teamAWins ? "A" : "B",
@@ -287,7 +299,7 @@ export async function triggerRandomEloInterference(numberOfPlayersToAffect = 3) 
         const newElo = player.elo + randomAdjustment;
         await db.collection(PLAYERS_COLLECTION).updateOne(
             { playerId: player.playerId },
-            { $set: { elo: newElo < 0 ? 0 : newElo } } // Ensure Elo doesn't go below 0 here too
+            { $set: { elo: newElo < 0 ? 0 : newElo } } 
         );
         updates.push({
             playerId: player.playerId,
