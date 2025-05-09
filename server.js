@@ -4,12 +4,12 @@ import * as playerController from './controllers/playerController.js';
 import * as simulationController from './controllers/simulationController.js';
 import * as championController from './controllers/championController.js';
 import * as matchController from './controllers/matchController.js';
-
+import cors from 'cors'; 
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-
+app.use(cors());
 app.use(express.json()); 
 
 
