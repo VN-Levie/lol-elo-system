@@ -11,17 +11,33 @@ import { faker } from '@faker-js/faker';
 
 let matchIdCounter = 0;
 
-export async function getAllPlayers(limit = 100, sortByElo = true) {
+export async function getAllPlayers(limit = 10, page = 1, sortByElo = true) {
     const db = await getDB();
-    const query = db.collection(PLAYERS_COLLECTION).find();
+    const playersCollection = db.collection(PLAYERS_COLLECTION);
+    
+    const skip = (Math.max(1, page) - 1) * limit; // Ensure page is at least 1
+
+    const queryOptions = {};
     if (sortByElo) {
-        query.sort({ elo: -1 });
+        queryOptions.sort = { elo: -1 };
     }
-    if (limit) {
-        query.limit(Number(limit));
-    }
-    return await query.toArray();
+
+    const players = await playersCollection.find({}, queryOptions)
+        .skip(skip)
+        .limit(Number(limit))
+        .toArray();
+        
+    const totalPlayers = await playersCollection.countDocuments();
+
+    return {
+        players,
+        totalPlayers,
+        currentPage: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(totalPlayers / limit)
+    };
 }
+
 
 export async function getPlayerByIdOrName(identifier) {
     const db = await getDB();

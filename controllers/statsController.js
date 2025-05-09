@@ -196,16 +196,27 @@ export async function getEloDistribution(req, res) {
     try {
         const db = await getDB(); // Ensure getDB is imported
         const players = await db.collection(PLAYERS_COLLECTION).find({}, { projection: { elo: 1 } }).toArray();
-        
-        const eloRanges = [
-            { label: '0-399', min: 0, max: 399, count: 0 },
-            { label: '400-799', min: 400, max: 799, count: 0 },
-            { label: '800-1199', min: 800, max: 1199, count: 0 },
-            { label: '1200-1599', min: 1200, max: 1599, count: 0 },
-            { label: '1600-1999', min: 1600, max: 1999, count: 0 },
-            { label: '2000-2399', min: 2000, max: 2399, count: 0 },
-            { label: '2400+', min: 2400, max: Infinity, count: 0 },
-        ];
+
+        const rangeStep = 150;
+        const maxElo = 2400;
+        const eloRanges = [];
+
+        for (let start = 0; start < maxElo; start += rangeStep) {
+            eloRanges.push({
+                label: `${start}-${start + rangeStep - 1}`,
+                min: start,
+                max: start + rangeStep - 1,
+                count: 0
+            });
+        }
+
+        // Add final range 2400+
+        eloRanges.push({
+            label: `${maxElo}+`,
+            min: maxElo,
+            max: Infinity,
+            count: 0
+        });
 
         players.forEach(player => {
             for (const range of eloRanges) {
@@ -234,6 +245,7 @@ export async function getEloDistribution(req, res) {
         res.status(500).json({ success: false, message: "Failed to get Elo distribution" });
     }
 }
+
 
 export async function getAverageStatsByRole(req, res) {
     try {

@@ -1,11 +1,10 @@
-// services/matchService.js
 import { getDB } from '../db/mongo.js';
 import {
     PLAYERS_COLLECTION,
     MATCH_HISTORY_LENGTH,
     STANDARD_ROLES,
     MATCHES_COLLECTION,
-    STREAK_THRESHOLDS
+    STREAK_CONFIG 
 } from '../config/constants.js';
 import * as eloService from './eloService.js';
 import * as playerService from './playerService.js';
@@ -56,7 +55,7 @@ async function updatePlayerAfterMatch(db, playerId, calculatedEloDelta, matchRec
     const player = await db.collection(PLAYERS_COLLECTION).findOne({ playerId: playerId });
     if (!player) return null;
 
-    let finalEloDeltaWithPBR = calculatedEloDelta; 
+    let finalEloDeltaWithPBR = calculatedEloDelta; // This is Base Elo + PBR, can be float
 
     let newWinStreak = player.currentWinStreak || 0;
     let newLossStreak = player.currentLossStreak || 0;
@@ -71,42 +70,61 @@ async function updatePlayerAfterMatch(db, playerId, calculatedEloDelta, matchRec
     }
 
     let streakAdjustment = 0;
-    if (newWinStreak >= (STREAK_THRESHOLDS?.WIN_STREAK_BONUS?.[0]?.count || 3) ) {
-        for (const threshold of (STREAK_THRESHOLDS?.WIN_STREAK_BONUS || [])) {
-            if (newWinStreak >= threshold.count) {
-                streakAdjustment = threshold.bonus; 
-            } else { break; }
+    if (didPlayerWinThisMatch && newWinStreak > 1 && STREAK_CONFIG) {
+        streakAdjustment += STREAK_CONFIG.BASE_WIN_STREAK_ELO_PER_MATCH * (newWinStreak - 1);
+        if (STREAK_CONFIG.WIN_STREAK_MILESTONES) {
+            STREAK_CONFIG.WIN_STREAK_MILESTONES.forEach(milestone => {
+                if (newWinStreak === milestone.count) {
+                    streakAdjustment += milestone.additional_bonus;
+                }
+            });
         }
-    } else if (newLossStreak >= (STREAK_THRESHOLDS?.LOSS_STREAK_MALUS?.[0]?.count || 3) ) {
-        for (const threshold of (STREAK_THRESHOLDS?.LOSS_STREAK_MALUS || [])) {
-            if (newLossStreak >= threshold.count) {
-                streakAdjustment = -threshold.malus;
-            } else { break; }
+    } else if (!didPlayerWinThisMatch && newLossStreak > 1 && STREAK_CONFIG) {
+        streakAdjustment += STREAK_CONFIG.BASE_LOSS_STREAK_ELO_PER_MATCH * (newLossStreak - 1);
+        if (STREAK_CONFIG.LOSS_STREAK_MILESTONES) {
+            STREAK_CONFIG.LOSS_STREAK_MILESTONES.forEach(milestone => {
+                if (newLossStreak === milestone.count) {
+                    streakAdjustment += milestone.additional_malus;
+                }
+            });
         }
     }
+    
+    if (STREAK_CONFIG && STREAK_CONFIG.MAX_STREAK_EFFECT) {
+        if (streakAdjustment > STREAK_CONFIG.MAX_STREAK_EFFECT) {
+            streakAdjustment = STREAK_CONFIG.MAX_STREAK_EFFECT;
+        } else if (streakAdjustment < -STREAK_CONFIG.MAX_STREAK_EFFECT) {
+            streakAdjustment = -STREAK_CONFIG.MAX_STREAK_EFFECT;
+        }
+    }
+    
     let finalEloDeltaWithStreak = finalEloDeltaWithPBR + streakAdjustment;
 
-    let newElo = player.elo + finalEloDeltaWithStreak;
+    let newElo = player.elo + finalEloDeltaWithStreak; // Elo is now float
     let actualEloChangeForHistory = finalEloDeltaWithStreak;
 
     if (newElo < 0) {
-        newElo = 0;
         actualEloChangeForHistory = 0 - player.elo; 
+        newElo = 0;
     }
     
     const newGamesPlayed = player.gamesPlayed + 1;
     
     const finalMatchRecordForPlayerHistory = {
         ...matchRecordForHistory,
-        eloChange: actualEloChangeForHistory,
-        streakAdjustment: streakAdjustment 
+        eloChange: actualEloChangeForHistory, // Store as float
+        streakInfo: { // Store detailed streak info
+            type: didPlayerWinThisMatch ? "win" : "loss",
+            count: didPlayerWinThisMatch ? newWinStreak : newLossStreak,
+            adjustmentValue: streakAdjustment // Store the calculated streak adjustment
+        }
     };
 
     await db.collection(PLAYERS_COLLECTION).updateOne(
         { playerId: playerId },
         {
             $set: { 
-                elo: newElo, 
+                elo: newElo, // Store Elo as float
                 gamesPlayed: newGamesPlayed,
                 currentWinStreak: newWinStreak,
                 currentLossStreak: newLossStreak
@@ -122,10 +140,12 @@ async function updatePlayerAfterMatch(db, playerId, calculatedEloDelta, matchRec
     return { 
         playerName: player.playerName, 
         oldElo: player.elo, 
-        newElo,
-        eloChange: actualEloChangeForHistory, 
-        baseEloPlusPbrDelta: finalEloDeltaWithPBR,
-        streakAdjustment: streakAdjustment,
+        newElo: newElo, // Return float Elo
+        eloChange: actualEloChangeForHistory, // Return float eloChange
+        baseEloPlusPbrDelta: finalEloDeltaWithPBR, // For debugging
+        streakAdjustment: streakAdjustment, // For debugging
+        currentWinStreak: newWinStreak,
+        currentLossStreak: newLossStreak,
         playerId: player.playerId, 
         championId: finalMatchRecordForPlayerHistory.championPlayed.championId,
         championName: finalMatchRecordForPlayerHistory.championPlayed.championName,
@@ -133,8 +153,8 @@ async function updatePlayerAfterMatch(db, playerId, calculatedEloDelta, matchRec
         kda: finalMatchRecordForPlayerHistory.kda,
         cs: finalMatchRecordForPlayerHistory.cs,
         gold: finalMatchRecordForPlayerHistory.gold,
-        eloBefore: player.elo,
-        eloAfter: newElo
+        eloBefore: player.elo, // Elo before this match
+        eloAfter: newElo    // Elo after this match and all adjustments (float)
     };
 }
 
@@ -150,30 +170,21 @@ function getCombinations(arr, k) {
 
 function findBalancedTeams(selectedPlayers) {
     if (selectedPlayers.length !== 10) return null;
-
     let bestCombination = null;
     let minEloDiff = Infinity;
     const numPlayers = selectedPlayers.length;
-    
     const allPossibleTeamAIndices = getCombinations([...Array(numPlayers).keys()], 5);
 
     for (const teamAIndices of allPossibleTeamAIndices) {
         if (teamAIndices.length === 0) continue;
-        if (teamAIndices[0] > 0 && numPlayers === 10 && allPossibleTeamAIndices.length > 126) {
-             // This optimization is tricky with the current combination generator if it's not perfectly ordered
-             // For a small set like 10C5, iterating all 252 might be simpler than a complex optimization.
-             // The main idea is to check about half if order of players in selectedPlayers is fixed.
-        }
+        if (numPlayers === 10 && teamAIndices[0] > 0 && allPossibleTeamAIndices.length > 126) { /* Optimization attempt */ }
 
         const currentTeamA = teamAIndices.map(index => selectedPlayers[index]);
         const currentTeamB = selectedPlayers.filter((_, index) => !teamAIndices.includes(index));
-
         if (currentTeamA.length !== 5 || currentTeamB.length !== 5) continue;
-
         const avgEloA = currentTeamA.reduce((sum, p) => sum + p.elo, 0) / 5;
         const avgEloB = currentTeamB.reduce((sum, p) => sum + p.elo, 0) / 5;
         const eloDiff = Math.abs(avgEloA - avgEloB);
-
         if (eloDiff < minEloDiff) {
             minEloDiff = eloDiff;
             bestCombination = { teamA: currentTeamA, teamB: currentTeamB, avgEloA, avgEloB, diff: eloDiff };
@@ -185,16 +196,12 @@ function findBalancedTeams(selectedPlayers) {
 async function assignRolesToTeam(teamPlayers, allChampionsList) {
     let availableRoles = [...STANDARD_ROLES];
     const playersWithRoles = [];
-
     for (const playerDoc of teamPlayers) {
         let assignedRoleThisPlayer = null;
         if (playerDoc.preferredRoles && playerDoc.preferredRoles.length > 0) {
             for (const prefRole of playerDoc.preferredRoles) {
                 const roleIndex = availableRoles.indexOf(prefRole);
-                if (roleIndex > -1) {
-                    assignedRoleThisPlayer = availableRoles.splice(roleIndex, 1)[0];
-                    break;
-                }
+                if (roleIndex > -1) { assignedRoleThisPlayer = availableRoles.splice(roleIndex, 1)[0]; break; }
             }
         }
         playersWithRoles.push({ ...playerDoc, tempAssignedRole: assignedRoleThisPlayer });
@@ -204,7 +211,6 @@ async function assignRolesToTeam(teamPlayers, allChampionsList) {
             p.tempAssignedRole = availableRoles.splice(Math.floor(Math.random() * availableRoles.length), 1)[0];
         }
     }
-    
     const finalTeam = [];
     for (const p of playersWithRoles) {
         if (!p.tempAssignedRole) continue; 
@@ -219,87 +225,46 @@ async function assignRolesToTeam(teamPlayers, allChampionsList) {
             chosenChampion = eligibleChampionsFromPool[Math.floor(Math.random() * eligibleChampionsFromPool.length)];
         } else {
             const suitableChampsForRole = allChampionsList.filter(c => c.primaryRole === p.tempAssignedRole || (c.secondaryRoles && c.secondaryRoles.includes(p.tempAssignedRole)));
-            if (suitableChampsForRole.length > 0) {
-                 chosenChampion = suitableChampsForRole[Math.floor(Math.random() * suitableChampsForRole.length)];
-            } else { // Fallback to any champion if no role-specific found (should be rare)
-                 chosenChampion = allChampionsList[Math.floor(Math.random() * allChampionsList.length)];
-            }
+            if (suitableChampsForRole.length > 0) { chosenChampion = suitableChampsForRole[Math.floor(Math.random() * suitableChampsForRole.length)]; }
+            else { chosenChampion = allChampionsList[Math.floor(Math.random() * allChampionsList.length)]; }
         }
         finalTeam.push({ ...p, role: p.tempAssignedRole, champion: chosenChampion ? { championId: chosenChampion.championId, championName: chosenChampion.championName } : { championId: "unknown", championName: "Unknown" } });
     }
     return finalTeam;
 }
 
-
 export async function simulateNewMatch() {
     const db = await getDB();
     const totalPlayerCount = await db.collection(PLAYERS_COLLECTION).countDocuments();
-
-    if (totalPlayerCount < 10) {
-        return { success: false, message: "Not enough players in DB to simulate a match (need at least 10)." };
-    }
+    if (totalPlayerCount < 10) { return { success: false, message: "Not enough players in DB to simulate a match (need at least 10)." }; }
 
     let selectedPlayersForMatch = [];
-    let attempt = 0;
-    const maxAttempts = 5;
-    let initialSearchRange = 150;
-    const searchRangeIncrement = 100;
+    let attempt = 0; const maxAttempts = 5; let initialSearchRange = 150; const searchRangeIncrement = 100;
     const allChampionsList = await championService.getAllChampions();
 
-
     while (selectedPlayersForMatch.length < 10 && attempt < maxAttempts) {
-        attempt++;
-        selectedPlayersForMatch = []; 
-
-        const seedPlayers = await db.collection(PLAYERS_COLLECTION).aggregate([
-            { $sample: { size: 1 } } 
-        ]).toArray();
-
-        if (seedPlayers.length === 0) {
-            continue; 
-        }
-        const seedPlayer = seedPlayers[0];
-        selectedPlayersForMatch.push(seedPlayer);
-
+        attempt++; selectedPlayersForMatch = []; 
+        const seedPlayers = await db.collection(PLAYERS_COLLECTION).aggregate([{ $sample: { size: 1 } }]).toArray();
+        if (seedPlayers.length === 0) { continue; }
+        const seedPlayer = seedPlayers[0]; selectedPlayersForMatch.push(seedPlayer);
         let currentSearchRange = initialSearchRange + (attempt - 1) * searchRangeIncrement;
-        const eloLowerBound = seedPlayer.elo - currentSearchRange;
-        const eloUpperBound = seedPlayer.elo + currentSearchRange;
-
-        const potentialTeammates = await db.collection(PLAYERS_COLLECTION).find({
-            playerId: { $ne: seedPlayer.playerId }, 
-            elo: { $gte: eloLowerBound, $lte: eloUpperBound }
-        }).limit(30) 
-          .toArray();
-        
+        const eloLowerBound = seedPlayer.elo - currentSearchRange; const eloUpperBound = seedPlayer.elo + currentSearchRange;
+        const potentialTeammates = await db.collection(PLAYERS_COLLECTION).find({ playerId: { $ne: seedPlayer.playerId }, elo: { $gte: eloLowerBound, $lte: eloUpperBound } }).limit(30).toArray();
         const shuffledCandidates = potentialTeammates.sort(() => 0.5 - Math.random());
         for (const candidate of shuffledCandidates) {
-            if (selectedPlayersForMatch.length < 10 && !selectedPlayersForMatch.find(p => p.playerId === candidate.playerId)) {
-                selectedPlayersForMatch.push(candidate);
-            }
+            if (selectedPlayersForMatch.length < 10 && !selectedPlayersForMatch.find(p => p.playerId === candidate.playerId)) { selectedPlayersForMatch.push(candidate); }
             if (selectedPlayersForMatch.length === 10) break;
         }
     }
-
     if (selectedPlayersForMatch.length < 10) {
-        selectedPlayersForMatch = await db.collection(PLAYERS_COLLECTION).aggregate([
-            { $sample: { size: 10 } }
-        ]).toArray();
-        if (selectedPlayersForMatch.length < 10) {
-             return { success: false, message: "Fallback random selection also failed to get 10 players." };
-        }
+        selectedPlayersForMatch = await db.collection(PLAYERS_COLLECTION).aggregate([{ $sample: { size: 10 } }]).toArray();
+        if (selectedPlayersForMatch.length < 10) { return { success: false, message: "Fallback random selection also failed to get 10 players." }; }
     }
 
     const balancedMatch = findBalancedTeams(selectedPlayersForMatch);
     let teamAData_matchmaking, teamBData_matchmaking;
-
-    if (balancedMatch) {
-        teamAData_matchmaking = balancedMatch.teamA;
-        teamBData_matchmaking = balancedMatch.teamB;
-    } else {
-        const shuffled = [...selectedPlayersForMatch].sort(() => 0.5 - Math.random());
-        teamAData_matchmaking = shuffled.slice(0, 5);
-        teamBData_matchmaking = shuffled.slice(5, 10);
-    }
+    if (balancedMatch) { teamAData_matchmaking = balancedMatch.teamA; teamBData_matchmaking = balancedMatch.teamB; }
+    else { const shuffled = [...selectedPlayersForMatch].sort(() => 0.5 - Math.random()); teamAData_matchmaking = shuffled.slice(0, 5); teamBData_matchmaking = shuffled.slice(5, 10); }
     
     const finalTeamAData = await assignRolesToTeam(teamAData_matchmaking, allChampionsList);
     const finalTeamBData = await assignRolesToTeam(teamBData_matchmaking, allChampionsList);
@@ -308,138 +273,70 @@ export async function simulateNewMatch() {
         const fallbackParticipants = await db.collection(PLAYERS_COLLECTION).aggregate([{ $sample: { size: 10 } }]).toArray();
         const tempTeamA = []; const tempTeamB = [];
         for(let i=0; i<10; i++) {
-            const pDoc = fallbackParticipants[i];
-            const role = STANDARD_ROLES[i%5];
+            const pDoc = fallbackParticipants[i]; const role = STANDARD_ROLES[i%5];
             const champ = allChampionsList.length > 0 ? allChampionsList[Math.floor(Math.random() * allChampionsList.length)] : {championId:"unknown", championName:"Unknown"};
             const pDetails = {...pDoc, role, champion: champ ? {championId: champ.championId, championName: champ.championName} : {championId:"unknown", championName:"Unknown"}};
             if(i<5) tempTeamA.push(pDetails); else tempTeamB.push(pDetails);
         }
-        teamAData_matchmaking = tempTeamA; 
-        teamBData_matchmaking = tempTeamB;
-    } else {
-        teamAData_matchmaking = finalTeamAData;
-        teamBData_matchmaking = finalTeamBData;
-    }
+        teamAData_matchmaking = tempTeamA; teamBData_matchmaking = tempTeamB;
+    } else { teamAData_matchmaking = finalTeamAData; teamBData_matchmaking = finalTeamBData; }
 
     const currentMatchId = playerService.getNextMatchId();
     const matchTimestamp = new Date();
-
     const calculateTeamAvgElo = (team) => team.reduce((sum, p) => sum + p.elo, 0) / team.length;
     const avgEloTeamA_before = calculateTeamAvgElo(teamAData_matchmaking);
     const avgEloTeamB_before = calculateTeamAvgElo(teamBData_matchmaking);
     const avgMatchElo = (avgEloTeamA_before + avgEloTeamB_before) / 2;
-
     const probTeamAWins = eloService.calculateExpectedScore(avgEloTeamA_before, avgEloTeamB_before);
     const teamAWins = Math.random() < probTeamAWins;
 
-    teamAData_matchmaking.forEach(p => {
-        p.performance = generatePerformanceStats(p.elo, p.role, teamAWins, p.champion, avgMatchElo, avgEloTeamA_before, avgEloTeamB_before);
-    });
-    teamBData_matchmaking.forEach(p => {
-        p.performance = generatePerformanceStats(p.elo, p.role, !teamAWins, p.champion, avgMatchElo, avgEloTeamB_before, avgEloTeamA_before);
-    });
+    teamAData_matchmaking.forEach(p => { p.performance = generatePerformanceStats(p.elo, p.role, teamAWins, p.champion, avgMatchElo, avgEloTeamA_before, avgEloTeamB_before); });
+    teamBData_matchmaking.forEach(p => { p.performance = generatePerformanceStats(p.elo, p.role, !teamAWins, p.champion, avgMatchElo, avgEloTeamB_before, avgEloTeamA_before); });
 
-    const updatedTeamAPlayerInfo = [];
-    const updatedTeamBPlayerInfo = [];
-
+    const updatedTeamAPlayerInfo = []; const updatedTeamBPlayerInfo = [];
     for (const player of teamAData_matchmaking) {
         const eloDeltaFromService = eloService.calculateEloDelta(player.elo, player.gamesPlayed, teamAWins, avgEloTeamA_before, avgEloTeamB_before, player.role, player.performance.kda, player.performance.cs, player.performance.gold, avgMatchElo);
-        const matchRecordForPlayerHistory = { 
-            matchId: currentMatchId, myTeamAvgElo: avgEloTeamA_before, opponentTeamAvgElo: avgEloTeamB_before, 
-            result: teamAWins ? "win" : "loss", timestamp: matchTimestamp, role: player.role,
-            championPlayed: player.champion, kda: player.performance.kda,
-            cs: player.performance.cs, gold: player.performance.gold
-        };
+        const matchRecordForPlayerHistory = { matchId: currentMatchId, myTeamAvgElo: avgEloTeamA_before, opponentTeamAvgElo: avgEloTeamB_before, result: teamAWins ? "win" : "loss", timestamp: matchTimestamp, role: player.role, championPlayed: player.champion, kda: player.performance.kda, cs: player.performance.cs, gold: player.performance.gold };
         const updateResult = await updatePlayerAfterMatch(db, player.playerId, eloDeltaFromService, matchRecordForPlayerHistory);
         if (updateResult) updatedTeamAPlayerInfo.push(updateResult);
     }
-
     for (const player of teamBData_matchmaking) {
         const eloDeltaFromService = eloService.calculateEloDelta(player.elo, player.gamesPlayed, !teamAWins, avgEloTeamB_before, avgEloTeamA_before, player.role, player.performance.kda, player.performance.cs, player.performance.gold, avgMatchElo);
-        const matchRecordForPlayerHistory = {
-            matchId: currentMatchId, myTeamAvgElo: avgEloTeamB_before, opponentTeamAvgElo: avgEloTeamA_before,
-            result: !teamAWins ? "win" : "loss", timestamp: matchTimestamp, role: player.role,
-            championPlayed: player.champion, kda: player.performance.kda,
-            cs: player.performance.cs, gold: player.performance.gold
-        };
+        const matchRecordForPlayerHistory = { matchId: currentMatchId, myTeamAvgElo: avgEloTeamB_before, opponentTeamAvgElo: avgEloTeamA_before, result: !teamAWins ? "win" : "loss", timestamp: matchTimestamp, role: player.role, championPlayed: player.champion, kda: player.performance.kda, cs: player.performance.cs, gold: player.performance.gold };
         const updateResult = await updatePlayerAfterMatch(db, player.playerId, eloDeltaFromService, matchRecordForPlayerHistory);
         if (updateResult) updatedTeamBPlayerInfo.push(updateResult);
     }
     
     const finalMatchDocument = {
-        matchId: currentMatchId,
-        timestamp: matchTimestamp,
-        winningTeam: teamAWins ? "A" : "B",
-        teamA: {
-            avgEloBefore: avgEloTeamA_before,
-            players: updatedTeamAPlayerInfo.map(p => ({
-                playerId: p.playerId, playerName: p.playerName,
-                championId: p.championId, championName: p.championName,
-                role: p.role, eloBefore: p.eloBefore, eloAfter: p.eloAfter,
-                eloChange: p.eloChange, kda: p.kda, cs: p.cs, gold: p.gold
-            }))
-        },
-        teamB: {
-            avgEloBefore: avgEloTeamB_before,
-            players: updatedTeamBPlayerInfo.map(p => ({
-                playerId: p.playerId, playerName: p.playerName,
-                championId: p.championId, championName: p.championName,
-                role: p.role, eloBefore: p.eloBefore, eloAfter: p.eloAfter,
-                eloChange: p.eloChange, kda: p.kda, cs: p.cs, gold: p.gold
-            }))
-        }
+        matchId: currentMatchId, timestamp: matchTimestamp, winningTeam: teamAWins ? "A" : "B",
+        teamA: { avgEloBefore: avgEloTeamA_before, players: updatedTeamAPlayerInfo.map(p => ({ playerId: p.playerId, playerName: p.playerName, championId: p.championId, championName: p.championName, role: p.role, eloBefore: p.eloBefore, eloAfter: p.eloAfter, eloChange: p.eloChange, kda: p.kda, cs: p.cs, gold: p.gold })) },
+        teamB: { avgEloBefore: avgEloTeamB_before, players: updatedTeamBPlayerInfo.map(p => ({ playerId: p.playerId, playerName: p.playerName, championId: p.championId, championName: p.championName, role: p.role, eloBefore: p.eloBefore, eloAfter: p.eloAfter, eloChange: p.eloChange, kda: p.kda, cs: p.cs, gold: p.gold })) }
     };
     await db.collection(MATCHES_COLLECTION).insertOne(finalMatchDocument);
     
     const apiResponseData = {
-        matchId: currentMatchId,
-        winningTeam: teamAWins ? "A" : "B",
-        teamADetails: updatedTeamAPlayerInfo.map(p => ({
-            playerName: p.playerName, eloChange: p.eloChange, 
-            newElo: p.eloAfter, championName: p.championName, role: p.role,
-            streakAdj: p.streakAdjustment
-        })),
-        teamBDetails: updatedTeamBPlayerInfo.map(p => ({
-            playerName: p.playerName, eloChange: p.eloChange, 
-            newElo: p.eloAfter, championName: p.championName, role: p.role,
-            streakAdj: p.streakAdjustment
-        })),
+        matchId: currentMatchId, winningTeam: teamAWins ? "A" : "B",
+        teamADetails: updatedTeamAPlayerInfo.map(p => ({ playerName: p.playerName, eloChange: p.eloChange, newElo: p.eloAfter, championName: p.championName, role: p.role, currentWinStreak: p.currentWinStreak, currentLossStreak: p.currentLossStreak, streakAdj: p.streakAdjustment})),
+        teamBDetails: updatedTeamBPlayerInfo.map(p => ({ playerName: p.playerName, eloChange: p.eloChange, newElo: p.eloAfter, championName: p.championName, role: p.role, currentWinStreak: p.currentWinStreak, currentLossStreak: p.currentLossStreak, streakAdj: p.streakAdjustment}))
     };
-
-    return { success: true, message: "Match simulated with improved matchmaking.", data: apiResponseData };
+    return { success: true, message: "Match simulated with improved matchmaking and detailed streak info.", data: apiResponseData };
 }
 
 export async function triggerRandomEloInterference(numberOfPlayersToAffect = 3) {
     const db = await getDB();
     const playerCount = await db.collection(PLAYERS_COLLECTION).countDocuments();
-    if (playerCount === 0) {
-        return { success: false, message: "No players in DB to affect." };
-    }
+    if (playerCount === 0) return { success: false, message: "No players in DB to affect." };
     const numToAffect = Math.min(numberOfPlayersToAffect, playerCount);
-    if (numToAffect <= 0) {
-         return { success: false, message: "Number of players to affect must be positive." };
-    }
-    const affectedPlayersDocs = await db.collection(PLAYERS_COLLECTION).aggregate([
-        { $sample: { size: numToAffect } }
-    ]).toArray();
+    if (numToAffect <= 0) return { success: false, message: "Number of players to affect must be positive." };
+    const affectedPlayersDocs = await db.collection(PLAYERS_COLLECTION).aggregate([{ $sample: { size: numToAffect } }]).toArray();
     const updates = [];
     for (const player of affectedPlayersDocs) {
-        const randomAdjustment = Math.floor(Math.random() * 31) - 15;
+        const randomAdjustment = Math.floor(Math.random() * 31) - 15; // +/- 0 to 15 float adjustment
         const oldElo = player.elo;
         let newElo = player.elo + randomAdjustment;
         if (newElo < 0) newElo = 0;
-        
-        await db.collection(PLAYERS_COLLECTION).updateOne(
-            { playerId: player.playerId },
-            { $set: { elo: newElo } } 
-        );
-        updates.push({ 
-            playerId: player.playerId, 
-            playerName: player.playerName, 
-            oldElo: oldElo, 
-            newElo: newElo, 
-            adjustment: randomAdjustment 
-        });
+        await db.collection(PLAYERS_COLLECTION).updateOne({ playerId: player.playerId }, { $set: { elo: newElo } });
+        updates.push({ playerId: player.playerId, playerName: player.playerName, oldElo: oldElo, newElo: newElo, adjustment: randomAdjustment });
     }
     return { success: true, message: `${updates.length} players randomly affected.`, data: updates };
 }

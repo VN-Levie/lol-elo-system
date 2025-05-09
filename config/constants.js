@@ -63,3 +63,21 @@ export const STREAK_THRESHOLDS = {
         { count: 7, malus: 3 }
     ]
 };
+
+export const STREAK_CONFIG = {
+    BASE_WIN_STREAK_ELO_PER_MATCH: 0.5, // Elo cộng thêm cho mỗi trận thắng trong chuỗi (sau trận đầu tiên)
+    BASE_LOSS_STREAK_ELO_PER_MATCH: -0.5, // Elo trừ thêm cho mỗi trận thua trong chuỗi (sau trận đầu tiên)
+    
+    // Bonus thêm tại các mốc cụ thể (cộng dồn với base_per_match)
+    WIN_STREAK_MILESTONES: [
+        { count: 3, additional_bonus: 0.5 }, // Tổng bonus tại streak 3 = (0.5 * 2) + 0.5 = 1.5 (nếu streak 1 ko tính)
+        { count: 5, additional_bonus: 1.0 }, // Cộng thêm 1.0 tại mốc 5
+        { count: 7, additional_bonus: 1.0 }  // Cộng thêm 1.0 tại mốc 7
+    ],
+    LOSS_STREAK_MILESTONES: [
+        { count: 3, additional_malus: -0.5 }, // Malus là giá trị âm
+        { count: 5, additional_malus: -1.0 },
+        { count: 7, additional_malus: -1.0 }
+    ],
+    MAX_STREAK_EFFECT: 5 // Giới hạn tổng điểm cộng/trừ từ streak để không quá lớn
+};
