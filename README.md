@@ -1,122 +1,135 @@
-**Báo Cáo Phát Triển Hệ Thống Tính Elo Mô Phỏng**
 
-**I. Giai Đoạn Khởi Đầu: Ý Tưởng và Mục Tiêu Cơ Bản (Console Application)**
+**Báo Cáo Tiến Độ và Dòng Chảy Phát Triển Hệ Thống Mô Phỏng Elo**
 
-1.  **Yêu Cầu Ban Đầu:**
-    *   Xây dựng hệ thống tính Elo cho 100 người chơi qua 100 trận đấu gần nhất của mỗi người.
-    *   Tự nghiên cứu điều kiện cộng/trừ điểm và hệ số.
-    *   Có khả năng random kết quả trận đấu cho một số người chơi.
-    *   Thiết kế UI (ban đầu là console, sau đó là web).
-    *   Ngôn ngữ: Node.js/JavaScript.
+**I. Giai Đoạn 1: Hình Thành Ý Tưởng và Nền Tảng Cơ Bản (Console)**
 
-2.  **Thiết Kế Elo Cốt Lõi Ban Đầu (Trước PBR):**
-    *   **Công thức Elo Chuẩn:** `R_new = R_old + K * (S - E)`
-        *   `R_old`: Elo hiện tại.
-        *   `K (K-Factor)`: Hệ số quyết định mức độ thay đổi Elo. Ban đầu được đề xuất là **K-Factor động**, thay đổi dựa trên số trận đã chơi (`gamesPlayed`) và/hoặc Elo hiện tại của người chơi.
-            *   Người chơi mới (<30 trận): K cao (ví dụ 40).
-            *   Người chơi Elo cao (>2200-2400): K thấp (ví dụ 10).
-            *   Người chơi thường: K trung bình (ví dụ 20).
-        *   `S (Actual Score)`: 1 cho thắng, 0 cho thua.
-        *   `E (Expected Score)`: `1 / (1 + 10^((Elo_trung_bình_đội_địch - Elo_trung_bình_đội_mình) / 400))`.
-    *   **Mô Phỏng Trận Đấu (5v5):**
-        *   Chọn 10 người chơi ngẫu nhiên.
-        *   Chia 2 đội ngẫu nhiên.
-        *   Xác định đội thắng: Ban đầu là random 50/50, sau đó cải tiến để đội có Elo trung bình cao hơn có tỷ lệ thắng cao hơn một chút.
-    *   **Lưu Trữ Dữ Liệu (Ban đầu là trong bộ nhớ, sau đó chuyển sang MongoDB):**
-        *   Thông tin người chơi: `playerId`, `playerName`, `elo`, `gamesPlayed`, `matchHistory` (mảng 100 trận gần nhất).
-        *   `matchHistory` mỗi trận: `matchId`, `opponentTeamAvgElo`, `myTeamAvgElo`, `result`, `eloChange`, `timestamp`.
-    *   **Yêu Cầu "Random Kết Quả":** Triển khai bằng cách sau một số trận, chọn ngẫu nhiên vài người chơi và cộng/trừ một lượng Elo nhỏ, độc lập với kết quả trận họ vừa chơi (nếu có).
+1.  **Mục tiêu ban đầu:** Xây dựng hệ thống tính Elo cho 100 người chơi, 100 trận gần nhất, có yếu tố ngẫu nhiên và UI (console).
+2.  **Tính Elo (Phiên bản 1.0 - Rất cơ bản):**
+    *   Công thức: `R_new = R_old + K * (S - E)`.
+    *   `K-Factor`: Động, dựa trên số trận đã chơi và Elo hiện tại (ví dụ: mới chơi K=40, Elo cao K=10, thường K=20).
+    *   `S`: 1 cho thắng, 0 cho thua.
+    *   `E`: Dựa trên chênh lệch Elo trung bình 2 đội.
+    *   Elo khởi điểm: Mặc định 1200.
+3.  **Mô Phỏng Trận Đấu (Phiên bản 1.0):**
+    *   Chọn 10 người chơi hoàn toàn ngẫu nhiên.
+    *   Chia 2 đội ngẫu nhiên.
+    *   Kết quả trận: Random 50/50, sau đó cải tiến nhẹ để đội Elo cao hơn có tỷ lệ thắng cao hơn một chút.
+    *   **Không có vai trò, không có tướng, không có chỉ số hiệu suất cá nhân (KDA, CS, Gold).**
+4.  **Lưu trữ:** Ban đầu là mảng trong bộ nhớ, sau đó nhanh chóng xác định cần database.
+5.  **Yếu tố ngẫu nhiên ("Random Event"):** Cộng/trừ Elo ngẫu nhiên cho một vài người chơi.
 
-**II. Giai Đoạn Chuyển Đổi và Mở Rộng: Tích Hợp MongoDB và Xây Dựng API**
+**II. Giai Đoạn 2: Chuyển Sang Backend API và Lưu Trữ Bền Vững (MongoDB)**
 
-1.  **Lựa Chọn Database:** Quyết định sử dụng **MongoDB** để lưu trữ dữ liệu bền vững, phù hợp với cấu trúc dữ liệu dạng JSON của JavaScript và mục tiêu học tập dài hạn.
-2.  **Tái Cấu Trúc Code:**
-    *   Tách logic kết nối DB (`db/mongo.js`).
-    *   Tách logic nghiệp vụ ra các `services` (`playerService.js`, `matchService.js`, `eloService.js`).
-    *   Tạo `controllers` để xử lý request API (`playerController.js`, `simulationController.js`).
-    *   Xây dựng server Express.js (`server.js`) để cung cấp các API endpoint.
-3.  **API Endpoints Được Triển Khai:**
-    *   Quản lý người chơi: `GET /players`, `GET /players/:playerId`, `POST /players/initialize`.
-    *   Mô phỏng: `POST /simulate/match`, `POST /randomize-event`.
-4.  **Cải Tiến Lưu Trữ Lịch Sử Đấu:**
-    *   **Thảo luận:** Nhận thấy việc truy vấn thông tin đầy đủ của một trận đấu (cả 10 người chơi) từ `players.matchHistory` là không hiệu quả.
-    *   **Giải pháp:** Tạo thêm collection **`matches`**. Mỗi document lưu thông tin chi tiết của một trận đấu, bao gồm `matchId`, `winningTeam`, và danh sách người chơi của cả hai đội cùng với Elo trước/sau, `eloChange`, và các chỉ số hiệu suất.
-    *   `players.matchHistory` vẫn lưu trữ thông tin tóm tắt và chi tiết cá nhân của người chơi đó trong trận để hiển thị lịch sử cá nhân nhanh chóng.
-    *   Thêm API để truy vấn `matches` collection: `GET /matches/:matchId`, `GET /matches?playerId=...`.
+1.  **Lựa chọn Database:** **MongoDB** được chọn để lưu trữ dữ liệu người chơi (`players` collection) và sau này là tướng, trận đấu.
+2.  **Xây dựng API (Express.js):**
+    *   Tái cấu trúc code thành `services`, `controllers`.
+    *   Các API cơ bản: lấy danh sách người chơi, chi tiết người chơi, khởi tạo, mô phỏng trận, kích hoạt random event.
+3.  **Tính Elo (Phiên bản 2.0 - Vẫn là cơ bản, nhưng chạy qua API):**
+    *   Logic tính Elo cốt lõi (trong `eloService.js`) không thay đổi so với Giai đoạn 1. Chỉ là cách gọi và cập nhật dữ liệu vào MongoDB.
+4.  **Mô Phỏng Trận Đấu (Phiên bản 2.0 - Qua API):**
+    *   Logic mô phỏng vẫn tương tự Giai đoạn 1, chỉ là dữ liệu được đọc/ghi từ MongoDB.
+    *   **Vẫn chưa có vai trò, tướng, hay chỉ số hiệu suất cá nhân được mô phỏng chi tiết.**
+5.  **Mở rộng Lưu Trữ - Collection `matches`:**
+    *   **Nhận thấy:** Khó khăn khi muốn xem lại chi tiết một trận đấu (cả 10 người) nếu chỉ dựa vào `players.matchHistory`.
+    *   **Giải pháp:** Tạo collection `matches` để lưu thông tin toàn diện của từng trận đấu (ID trận, đội thắng, danh sách người chơi mỗi đội cùng Elo trước/sau, `eloChange`). `players.matchHistory` vẫn lưu tóm tắt và chi tiết của cá nhân người đó.
+    *   Thêm API để truy vấn `matches`.
 
-**III. Giai Đoạn Nâng Cao: Tích Hợp Performance-Based Rating (PBR) và Các Yếu Tố "Thật" Hơn**
+**III. Giai Đoạn 3: Nâng Cao Hệ Thống - PBR, Chi Tiết Hóa Mô Phỏng (Trọng Tâm Hiện Tại)**
 
-Đây là giai đoạn chúng ta đang tập trung và đã có nhiều thay đổi quan trọng trong **cơ chế tính Elo**.
+Đây là giai đoạn có sự thay đổi lớn nhất và phức tạp nhất, đặc biệt là về **cách tính Elo** và **chất lượng mô phỏng trận đấu.**
 
-1.  **Yêu Cầu Mới:**
-    *   Elo khởi điểm của người chơi là `0`.
-    *   Tính Elo dựa trên hiệu suất cá nhân (PBR).
-    *   Lưu trữ thêm thông tin: Tướng đã chơi, vai trò.
-    *   Tạo danh sách tướng giả lập (~50 tướng), lưu vào MongoDB (collection `champions`).
+1.  **Yêu Cầu Nâng Cao:**
+    *   Elo khởi điểm = `0`.
+    *   **Performance-Based Rating (PBR):** Elo phải phản ánh hiệu suất cá nhân.
+    *   Mô phỏng tướng, vai trò, và các chỉ số KDA, CS, Gold.
+    *   Hệ thống chuỗi thắng/thua.
+    *   Mô phỏng matchmaking "thật" hơn.
 
-2.  **Thay Đổi Cách Tính Elo (Tập trung vào `eloService.calculateEloDelta`):**
-    *   **Đầu vào mới cho hàm tính Elo:** Ngoài các yếu tố cũ, hàm `calculateEloDelta` giờ đây nhận thêm:
-        *   `playerRole`: Vai trò người chơi đảm nhận (Top, Mid, Jungle, ADC, Support).
-        *   `playerKDA`: Đối tượng `{ kills, deaths, assists }`.
-        *   `playerCS`: Tổng số lính.
-        *   `playerGold`: Tổng số vàng.
-        *   (`avgMatchElo` cũng được truyền vào để có thể dùng cho việc điều chỉnh benchmark PBR nâng cao sau này).
-    *   **Bước 1: Tính `baseEloChange`:** Vẫn dựa trên công thức Elo chuẩn (Win/Loss, chênh lệch Elo đội, K-Factor).
-    *   **Bước 2: Tính `pbrAdjustment`:**
-        *   **Định nghĩa Benchmark:** Trong `config/constants.js`, tạo `PBR_BENCHMARKS` cho mỗi vai trò, bao gồm `kdaRatio`, `csPerMin`, `goldPerMin` kỳ vọng (giả định `AVERAGE_MATCH_DURATION_MINUTES` để quy đổi).
-        *   **So sánh hiệu suất:** Tính `playerKdaRatio`, `playerCsPerMin`, `playerGoldPerMin` từ dữ liệu thực tế của người chơi.
-        *   **Tính `performanceScore`:** Một điểm số tổng hợp dựa trên mức độ chênh lệch của các chỉ số cá nhân so với benchmark của vai trò. Mỗi chỉ số (KDA, CS, Gold) có một trọng số nhất định.
-        *   **Quy đổi `performanceScore` thành `pbrAdjustment` (điểm Elo):**
-            *   `performanceScore` dương (chơi tốt hơn benchmark) -> `pbrAdjustment` dương.
-            *   `performanceScore` âm (chơi tệ hơn benchmark) -> `pbrAdjustment` âm.
-            *   `pbrAdjustment` được giới hạn bởi `MAX_PBR_POSITIVE_ADJUSTMENT` và `MAX_PBR_NEGATIVE_ADJUSTMENT` (ví dụ: +/- 5 Elo) để không làm lu mờ `baseEloChange`.
-            *   Có thêm logic tinh chỉnh nhỏ: thắng mà chơi quá tệ có thể bị giảm PBR bonus, thua mà chơi quá hay có thể được giảm PBR malus.
-    *   **Bước 3: Tính `finalEloChange = baseEloChange + pbrAdjustment`.**
+2.  **Thay Đổi Lớn trong Mô Phỏng Trận Đấu (`matchService.simulateNewMatch`):**
+    *   **Hệ thống Tướng:**
+        *   Tạo collection `champions` trong MongoDB (~50 tướng giả lập).
+        *   Người chơi có `championPool` (danh sách tướng hay chơi).
+    *   **Hệ thống Vai Trò:**
+        *   Người chơi có `preferredRoles` (vai trò yêu thích).
+    *   **Cải thiện Matchmaking (Phiên bản 3.0 -> 3.1):**
+        *   **Ban đầu (3.0):** Vẫn chọn 10 người ngẫu nhiên, sau đó cố gắng gán vai trò dựa trên `preferredRoles` và chọn tướng từ `championPool` (nếu phù hợp vai trò).
+        *   **Cải tiến (3.1 - Hiện tại):**
+            *   **Tìm kiếm dựa trên Elo:** Chọn "seed player", tìm kiếm người chơi khác trong một khoảng Elo (`searchRange`), mở rộng nếu cần.
+            *   **Cân bằng đội (`findBalancedTeams`):** Sau khi có 10 người, thử các cách chia đội để tìm ra cặp đội có chênh lệch Elo trung bình thấp nhất.
+            *   **Gán vai trò và chọn tướng cho đội đã cân bằng (`assignRolesToTeam`):** Logic ưu tiên `preferredRoles` và `championPool` được áp dụng cho từng đội.
+    *   **Mô Phỏng Chỉ Số Hiệu Suất (`generatePerformanceStats` - Phiên bản 2.0 -> 3.0):**
+        *   **Ban đầu (2.0):** Rất đơn giản, random dựa trên vai trò và thắng/thua.
+        *   **Cải tiến (3.0 - Hiện tại):** "Thông minh" hơn nhiều:
+            *   Tính `skillFactor` (dựa trên chênh lệch Elo người chơi so với Elo trung bình trận).
+            *   Tính `teamPerformanceFactor` (dựa trên chênh lệch Elo trung bình 2 đội).
+            *   Các chỉ số KDA, CS, Gold được tạo ra dựa trên vai trò, `skillFactor`, `winFactor`, `teamPerformanceFactor`, và yếu tố ngẫu nhiên. Điều này giúp KDA của người chơi Elo cao khi "smurf" trở nên hợp lý hơn.
 
-3.  **Cải Tiến Yếu Tố Chuỗi Thắng/Thua (Streaks):**
-    *   **Theo dõi:** Thêm `currentWinStreak` và `currentLossStreak` vào `players` document.
-    *   **Áp dụng:** Trong `matchService.updatePlayerAfterMatch`, sau khi có `finalEloChange` (đã bao gồm PBR):
-        *   Cập nhật streak của người chơi.
-        *   Dựa trên độ dài chuỗi thắng/thua mới, cộng thêm một `streakAdjustment` (bonus/malus Elo nhỏ, ví dụ +/- 1 đến 3 Elo) vào `finalEloChange`.
-        *   Các ngưỡng và điểm thưởng/phạt được định nghĩa trong `STREAK_THRESHOLDS`.
+3.  **Thay Đổi Lớn trong Cách Tính Elo (`eloService.calculateEloDelta` và `matchService.updatePlayerAfterMatch` - Phiên bản 3.0):**
+    *   **Đầu vào mới cho `calculateEloDelta`:** `playerRole`, `playerKDA`, `playerCS`, `playerGold` (lấy từ `generatePerformanceStats`).
+    *   **Tính `baseEloChange`:** Vẫn như cũ (Win/Loss, K-Factor, chênh lệch Elo đội).
+    *   **Tính `pbrAdjustment`:**
+        *   Định nghĩa `PBR_BENCHMARKS` (KDA, CS/min, Gold/min kỳ vọng) cho từng vai trò.
+        *   So sánh hiệu suất thực tế của người chơi (đã quy đổi ra /min nếu cần) với benchmark.
+        *   Tính `performanceScore` tổng hợp (có trọng số cho KDA, CS, Gold).
+        *   Quy đổi `performanceScore` thành điểm Elo `pbrAdjustment` (có giới hạn `MAX_PBR_POSITIVE/NEGATIVE_ADJUSTMENT`).
+    *   **`eloDeltaWithPbr = baseEloChange + pbrAdjustment`.**
+    *   **Thêm `streakAdjustment` (trong `updatePlayerAfterMatch`):**
+        *   Theo dõi `currentWinStreak`, `currentLossStreak` của người chơi.
+        *   Dựa trên `STREAK_THRESHOLDS`, cộng/trừ một lượng điểm nhỏ vào `eloDeltaWithPbr`.
+    *   **`finalEloDelta = eloDeltaWithPbr + streakAdjustment`.**
+    *   **Đảm bảo Elo >= 0:** `newElo = player.elo + finalEloDelta`. Nếu `newElo < 0`, `newElo` được đặt thành `0`. `eloChange` ghi vào lịch sử được điều chỉnh theo.
+    *   **Lưu trữ chi tiết:** `players.matchHistory` và `matches` collection giờ đây lưu đầy đủ vai trò, tướng, KDA, CS, Gold, `eloChange` (đã bao gồm PBR và streak, và đã được điều chỉnh nếu chạm sàn 0), và `streakAdjustment`.
 
-4.  **Đảm Bảo Elo Tối Thiểu là 0:**
-    *   Trong `matchService.updatePlayerAfterMatch`, sau khi đã có `finalEloChange` (bao gồm PBR và streak), nếu `newElo` (Elo mới sau khi cộng `finalEloChange`) < 0, thì `newElo` được đặt thành 0.
-    *   `eloChange` được ghi vào `matchHistory` cũng được điều chỉnh để phản ánh đúng lượng điểm bị trừ thực tế nếu Elo chạm sàn 0.
+**Trạng Thái Tính Elo Hiện Tại (Rất Chi Tiết):**
 
-5.  **Cải Tiến Hệ Thống Giả Lập Trận Đấu (`matchService.simulateNewMatch`):**
-    *   **Mô Phỏng Chỉ Số Hiệu Suất (`generatePerformanceStats`):**
-        *   Ban đầu đơn giản, chỉ dựa vào vai trò và kết quả thắng/thua.
-        *   **Cải tiến đáng kể:** Hàm này được làm "thông minh" hơn bằng cách xem xét:
-            *   Chênh lệch Elo cá nhân của người chơi so với Elo trung bình trận (`skillFactor`).
-            *   Chênh lệch Elo trung bình giữa hai đội (`teamPerformanceFactor`).
-            *   Điều chỉnh KDA, CS, Gold dựa trên các factor này để người chơi Elo cao có xu hướng "dominate" khi thắng, hoặc KDA vẫn ổn dù thua nếu chênh lệch kỹ năng lớn.
-    *   **Gán Vai Trò và Chọn Tướng "Thật" Hơn:**
-        *   Người chơi có `preferredRoles` (mảng vai trò yêu thích) và `championPool` (mảng tướng hay chơi) trong document của mình (được gán ngẫu nhiên khi khởi tạo).
-        *   Hàm `assignRolesAndChampions` mới được tạo để:
-            *   Cố gắng gán vai trò cho người chơi dựa trên `preferredRoles` của họ, đảm bảo mỗi đội có đủ 5 vị trí.
-            *   Sau khi có vai trò, chọn tướng ưu tiên từ `championPool` của người chơi nếu tướng đó phù hợp với vai trò.
-            *   Có fallback về việc gán/chọn ngẫu nhiên nếu logic "thông minh" không tìm được giải pháp.
-        *   Điều này thay thế việc gán vai trò và chọn tướng hoàn toàn ngẫu nhiên trước đây.
+1.  Người chơi bắt đầu với **0 Elo**.
 
-**Tóm Tắt Cách Tính Elo Hiện Tại (Sau Tất Cả Các Cải Tiến):**
+2.  Khi một trận đấu kết thúc, với mỗi người chơi tham gia:
 
-1.  **Elo Khởi Điểm:** 0.
-2.  **Trong một trận đấu, với mỗi người chơi:**
-    a.  **Tính `baseEloChange`:** Dựa trên Elo hiện tại, K-Factor động, kết quả thắng/thua, và chênh lệch Elo trung bình giữa hai đội.
-    b.  **Tính `pbrAdjustment`:** Dựa trên so sánh KDA, CS, Gold thực tế (được mô phỏng bởi `generatePerformanceStats` đã cải tiến) của người chơi với benchmark của vai trò mà họ đảm nhận (đã được gán "thông minh" hơn).
-    c.  `eloDeltaWithPbr = baseEloChange + pbrAdjustment`.
-    d.  **Tính `streakAdjustment`:** Dựa trên chuỗi thắng/thua hiện tại của người chơi.
-    e.  `finalEloDelta = eloDeltaWithPbr + streakAdjustment`.
-    f.  `newElo = player.elo + finalEloDelta`.
-    g.  Nếu `newElo < 0`, thì `newElo = 0`. `eloChange` ghi vào lịch sử được điều chỉnh tương ứng.
-    h.  Cập nhật Elo, `gamesPlayed`, chuỗi thắng/thua cho người chơi.
-    i.  Lưu chi tiết trận đấu (bao gồm vai trò, tướng, KDA, CS, Gold, eloChange) vào `players.matchHistory` và `matches` collection.
+    a.  **`baseEloChange`** được tính dựa trên:
 
-**Trọng Tâm Tiếp Theo (và đã bắt đầu hình thành):**
+        *   Elo hiện tại của họ.
+        *   K-Factor động (dựa trên số trận đã chơi và Elo hiện tại).
+        *   Kết quả thắng/thua của đội họ.
+        *   Chênh lệch Elo trung bình giữa đội họ và đội đối thủ (để tính Expected Score).
 
-*   **Hiển thị đánh giá hiệu suất (S, A, B, C, D, MVP):** Đây là "sản phẩm phụ" của logic PBR. Chúng ta cần định nghĩa các ngưỡng `performanceScore` để quy ra các hạng này.
-*   **Hệ thống Rank (Đồng, Bạc, Vàng...):** Ánh xạ từ điểm Elo của người chơi.
-*   **Cải thiện Matchmaking trong `simulateNewMatch`:** Để các trận đấu mô phỏng có tính "cân kèo" hơn, ưu tiên người chơi có Elo gần nhau.
-*   **Tinh chỉnh liên tục:** `PBR_BENCHMARKS`, trọng số PBR, logic `generatePerformanceStats`, điểm bonus/malus của streak – tất cả đều cần được quan sát và tinh chỉnh để hệ thống hoạt động một cách cân bằng và hợp lý nhất.
+    b.  **`pbrAdjustment`** được tính dựa trên:
+
+        *   So sánh KDA (tỷ lệ), CS/phút, Gold/phút của người chơi (được mô phỏng bởi `generatePerformanceStats` đã cải tiến) với các `PBR_BENCHMARKS` được định nghĩa sẵn cho vai trò mà họ đảm nhận trong trận đó.
+        *   Mức độ "vượt trội" hay "kém hơn" benchmark này được quy thành một điểm Elo cộng/trừ, có giới hạn.
+    c.  **`eloDeltaWithPbr = baseEloChange + pbrAdjustment`**.
+
+    d.  **`streakAdjustment`** được tính dựa trên:
+
+        *   Chuỗi thắng hoặc thua liên tiếp hiện tại của người chơi.
+        *   Các ngưỡng `STREAK_THRESHOLDS` để xác định điểm bonus/malus.
+    e.  **`finalEloDelta = eloDeltaWithPbr + streakAdjustment`**. Đây là tổng số điểm Elo người chơi sẽ nhận/mất *trước khi* xét sàn 0.
+
+    f.  Elo mới của người chơi được tính: `player.elo_cũ + finalEloDelta`.
+
+    g.  **Kiểm tra sàn Elo:** Nếu Elo mới < 0, nó được đặt thành 0.
+
+    h.  `eloChange` thực tế được ghi vào lịch sử đấu (`matchHistory` và `matches`) là lượng điểm đã thực sự thay đổi sau khi áp dụng sàn 0.
+
+    i.  Chuỗi thắng/thua của người chơi được cập nhật.
+
+---
+
+**Timeline (Các Mốc Chính Đã Hoàn Thành):**
+
+1. Khởi tạo dự án, xây dựng logic Elo cơ bản (K-Factor, S, E) và mô phỏng trận đấu ngẫu nhiên đơn giản trên console.
+2. Quyết định sử dụng MongoDB. Thiết lập kết nối DB. Chuyển đổi dữ liệu người chơi sang lưu trữ trong MongoDB.
+3. Bắt đầu xây dựng API với Express.js. Tái cấu trúc code thành services/controllers. Triển khai các API cơ bản cho Player và Simulate.
+4. Thảo luận và triển khai collection `matches` để lưu trữ chi tiết toàn bộ trận đấu. Tạo API truy vấn `matches`.
+5. Bắt đầu tích hợp PBR:
+    *   Thay đổi `INITIAL_ELO = 0`.
+    *   Tạo collection `champions` và seed dữ liệu.
+    *   Mô phỏng Vai trò, Tướng, và các chỉ số KDA, CS, Gold (hàm `generatePerformanceStats` phiên bản đầu).
+
+6. Triển khai logic PBR vào `eloService.calculateEloDelta` (so sánh với benchmark, tính `pbrAdjustment`). Đảm bảo Elo không âm.
+7. Thêm hệ thống Chuỗi Thắng/Thua (`currentWin/LossStreak`, `streakAdjustment`).
+8. Cải thiện đáng kể hệ thống mô phỏng trận đấu (`simulateNewMatch`):
+    *   Cải thiện `generatePerformanceStats` để KDA/CS/Gold "thật" hơn, xét đến chênh lệch Elo.
+    *   Triển khai matchmaking dựa trên Elo (tìm người chơi trong `searchRange`, cân bằng Elo 2 đội).
+    *   Gán vai trò và chọn tướng dựa trên `preferredRoles` và `championPool` của người chơi.
 
