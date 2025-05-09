@@ -44,8 +44,11 @@ app.get('/api/config/pbr-settings', configController.getPbrSettings);
 
 
 // Stats Routes
-app.get('/api/stats/elo-distribution', statsController.getEloDistribution);
-
+app.get('/api/stats/server-summary', statsController.getServerSummary);
+app.get('/api/stats/elo-distribution', statsController.getEloDistribution); // Đã có từ trước
+app.get('/api/stats/champion-pick-rates', statsController.getChampionPickRates);
+app.get('/api/stats/champion-win-rates', statsController.getChampionWinRates);
+app.get('/api/stats/role-win-rates', statsController.getRoleWinRates); // Đã có từ trước
 
 async function startServer() {
     try {
