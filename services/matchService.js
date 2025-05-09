@@ -1,5 +1,5 @@
 import { getDB } from '../db/mongo.js';
-import { PLAYERS_COLLECTION, MATCH_HISTORY_LENGTH, STANDARD_ROLES, MATCHES_COLLECTION } from '../config/constants.js';
+import { PLAYERS_COLLECTION, MATCH_HISTORY_LENGTH, STANDARD_ROLES, MATCHES_COLLECTION, STREAK_THRESHOLDS } from '../config/constants.js';
 import * as eloService from './eloService.js';
 import * as playerService from './playerService.js';
 import * as championService from './championService.js';
@@ -70,12 +70,49 @@ function generatePerformanceStats(playerCurrentElo, playerRole, didPlayerWin, ch
     };
 }
 
-async function updatePlayerAfterMatch(db, playerId, eloChange, matchRecordForHistory) {
+async function updatePlayerAfterMatch(db, playerId, calculatedEloDelta, matchRecordForHistory) {
     const player = await db.collection(PLAYERS_COLLECTION).findOne({ playerId: playerId });
     if (!player) return null;
 
-    let newElo = player.elo + eloChange;
-    let actualEloChangeForHistory = eloChange;
+    let finalEloDelta = calculatedEloDelta; // This is eloChange from (Base Elo + PBR)
+
+    // 1. Update Streaks
+    let newWinStreak = player.currentWinStreak || 0;
+    let newLossStreak = player.currentLossStreak || 0;
+    const didPlayerWinThisMatch = matchRecordForHistory.result === "win";
+
+    if (didPlayerWinThisMatch) {
+        newWinStreak++;
+        newLossStreak = 0;
+    } else {
+        newLossStreak++;
+        newWinStreak = 0;
+    }
+
+    // 2. Apply Streak Bonus/Malus to finalEloDelta
+    let streakAdjustment = 0;
+    if (newWinStreak >= STREAK_THRESHOLDS.WIN_STREAK_BONUS[0].count) {
+        for (const threshold of STREAK_THRESHOLDS.WIN_STREAK_BONUS) {
+            if (newWinStreak >= threshold.count) {
+                streakAdjustment = threshold.bonus; // Takes the highest applicable bonus
+            } else {
+                break;
+            }
+        }
+    } else if (newLossStreak >= STREAK_THRESHOLDS.LOSS_STREAK_MALUS[0].count) {
+        for (const threshold of STREAK_THRESHOLDS.LOSS_STREAK_MALUS) {
+            if (newLossStreak >= threshold.count) {
+                streakAdjustment = -threshold.malus; // Takes the highest applicable malus (subtracted)
+            } else {
+                break;
+            }
+        }
+    }
+    finalEloDelta += streakAdjustment;
+
+    // 3. Calculate new Elo and ensure it's not below 0
+    let newElo = player.elo + finalEloDelta;
+    let actualEloChangeForHistory = finalEloDelta;
 
     if (newElo < 0) {
         newElo = 0;
@@ -84,16 +121,21 @@ async function updatePlayerAfterMatch(db, playerId, eloChange, matchRecordForHis
 
     const newGamesPlayed = player.gamesPlayed + 1;
 
-
     const finalMatchRecordForHistory = {
         ...matchRecordForHistory,
-        eloChange: actualEloChangeForHistory
+        eloChange: actualEloChangeForHistory,
+        streakBonus: streakAdjustment // (Optional) Store streak adjustment in history
     };
 
     await db.collection(PLAYERS_COLLECTION).updateOne(
         { playerId: playerId },
         {
-            $set: { elo: newElo, gamesPlayed: newGamesPlayed },
+            $set: {
+                elo: newElo,
+                gamesPlayed: newGamesPlayed,
+                currentWinStreak: newWinStreak,
+                currentLossStreak: newLossStreak
+            },
             $push: {
                 matchHistory: {
                     $each: [finalMatchRecordForHistory],
@@ -107,6 +149,8 @@ async function updatePlayerAfterMatch(db, playerId, eloChange, matchRecordForHis
         oldElo: player.elo,
         newElo,
         eloChange: actualEloChangeForHistory,
+        baseEloPlusPbrDelta: calculatedEloDelta,
+        streakAdjustment: streakAdjustment,
         playerId: player.playerId,
         championId: finalMatchRecordForHistory.championPlayed.championId,
         championName: finalMatchRecordForHistory.championPlayed.championName,
@@ -168,23 +212,19 @@ export async function simulateNewMatch() {
     const updatedTeamAPlayerInfo = [];
     const updatedTeamBPlayerInfo = [];
 
+    // Update Elo for players in Team A
     for (const player of teamAData) {
-        const eloDelta = eloService.calculateEloDelta(
-            player.elo,
-            player.gamesPlayed,
-            teamAWins,
-            avgEloTeamA_before,
-            avgEloTeamB_before,
-            player.role,
-            player.performance.kda,
-            player.performance.cs,
-            player.performance.gold,
+        const eloDeltaFromService = eloService.calculateEloDelta( // This is Base Elo + PBR
+            player.elo, player.gamesPlayed, teamAWins, 
+            avgEloTeamA_before, avgEloTeamB_before,
+            player.role, player.performance.kda, player.performance.cs, player.performance.gold,
             avgMatchElo
         );
-        const matchRecordForPlayerHistory = {
-            matchId: currentMatchId,
-            myTeamAvgElo: avgEloTeamA_before,
-            opponentTeamAvgElo: avgEloTeamB_before,
+        // matchRecordForPlayerHistory is prepared WITHOUT eloChange initially
+        const matchRecordForPlayerHistory = { 
+            matchId: currentMatchId, 
+            myTeamAvgElo: avgEloTeamA_before, 
+            opponentTeamAvgElo: avgEloTeamB_before, 
             result: teamAWins ? "win" : "loss",
             timestamp: matchTimestamp,
             role: player.role,
@@ -193,22 +233,17 @@ export async function simulateNewMatch() {
             cs: player.performance.cs,
             gold: player.performance.gold
         };
-        const updateResult = await updatePlayerAfterMatch(db, player.playerId, eloDelta, matchRecordForPlayerHistory);
+        // updatePlayerAfterMatch now takes eloDeltaFromService and applies streaks internally
+        const updateResult = await updatePlayerAfterMatch(db, player.playerId, eloDeltaFromService, matchRecordForPlayerHistory);
         if (updateResult) updatedTeamAPlayerInfo.push(updateResult);
     }
 
-
+    // Update Elo for players in Team B (tương tự)
     for (const player of teamBData) {
-        const eloDelta = eloService.calculateEloDelta(
-            player.elo,
-            player.gamesPlayed,
-            !teamAWins,
-            avgEloTeamB_before,
-            avgEloTeamA_before,
-            player.role,
-            player.performance.kda,
-            player.performance.cs,
-            player.performance.gold,
+        const eloDeltaFromService = eloService.calculateEloDelta( // This is Base Elo + PBR
+            player.elo, player.gamesPlayed, !teamAWins, 
+            avgEloTeamB_before, avgEloTeamA_before,
+            player.role, player.performance.kda, player.performance.cs, player.performance.gold,
             avgMatchElo
         );
         const matchRecordForPlayerHistory = {
@@ -223,7 +258,7 @@ export async function simulateNewMatch() {
             cs: player.performance.cs,
             gold: player.performance.gold
         };
-        const updateResult = await updatePlayerAfterMatch(db, player.playerId, eloDelta, matchRecordForPlayerHistory);
+        const updateResult = await updatePlayerAfterMatch(db, player.playerId, eloDeltaFromService, matchRecordForPlayerHistory);
         if (updateResult) updatedTeamBPlayerInfo.push(updateResult);
     }
 
@@ -299,7 +334,7 @@ export async function triggerRandomEloInterference(numberOfPlayersToAffect = 3) 
         const newElo = player.elo + randomAdjustment;
         await db.collection(PLAYERS_COLLECTION).updateOne(
             { playerId: player.playerId },
-            { $set: { elo: newElo < 0 ? 0 : newElo } } 
+            { $set: { elo: newElo < 0 ? 0 : newElo } }
         );
         updates.push({
             playerId: player.playerId,

@@ -58,7 +58,9 @@ export async function initializePlayers(forceReset = false) {
             playerName: `Player ${i}`,
             elo: INITIAL_ELO,
             gamesPlayed: 0,
-            matchHistory: []
+            matchHistory: [],
+            currentWinStreak: 0,  
+            currentLossStreak: 0 
         });
     }
     await playersCollection.insertMany(newPlayers);
