@@ -1,4 +1,4 @@
-export const INITIAL_ELO = 0;
+export const INITIAL_ELO = 1200;
 export const TOTAL_PLAYERS_INIT = 1000; // just for initialization/testing
 export const MATCH_HISTORY_LENGTH = 100;
 export const PLAYERS_COLLECTION = 'players';
@@ -48,8 +48,8 @@ export const PBR_BENCHMARKS = {
 };
 
 
-export const MAX_PBR_POSITIVE_ADJUSTMENT = 5;
-export const MAX_PBR_NEGATIVE_ADJUSTMENT = -5;
+export const MAX_PBR_POSITIVE_ADJUSTMENT = 10;
+export const MAX_PBR_NEGATIVE_ADJUSTMENT = -10;
 
 export const STREAK_THRESHOLDS = {
     WIN_STREAK_BONUS: [ 
