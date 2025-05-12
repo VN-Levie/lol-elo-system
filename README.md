@@ -73,7 +73,7 @@
 
 **Trạng Thái Tính Elo Hiện Tại (Rất Chi Tiết):**
 
-1.  Người chơi bắt đầu với **0 Elo**.
+1.  Người chơi bắt đầu với **1200 Elo**.
 
 2.  Khi một trận đấu kết thúc, với mỗi người chơi tham gia, việc thay đổi Elo được xác định qua các bước:
 
